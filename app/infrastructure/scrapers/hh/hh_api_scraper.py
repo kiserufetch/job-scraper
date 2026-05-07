@@ -5,15 +5,15 @@
 их используют сами разработчики hh.ru для Selenium-тестов.
 
 Логика фильтрации:
-  1) Офис/гибрид в указанном городе  (schedule=fullDay)
-  2) Удалёнка по всей РФ              (schedule=remote, без area)
+  1) Офис/гибрид в выбранном регионе — schedule=fullDay + flexible, area=<id>
+  2) Удалёнка в пределах РФ — schedule=remote, area=113 (страна Россия на hh.ru)
 """
 
 from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 from bs4 import BeautifulSoup, Tag
@@ -23,7 +23,10 @@ from app.domain.entities import Job, SiteFilter
 from app.domain.enums import SourceType
 from app.infrastructure.scrapers.base_scraper import BaseWebScraper
 from app.infrastructure.scrapers.hh import selectors
-from app.infrastructure.scrapers.hh.mappers import HH_EXPERIENCE_MAP
+from app.infrastructure.scrapers.hh.area_normalize import (
+    hh_remote_area_param,
+    normalize_hh_area_id,
+)
 from app.infrastructure.scrapers.http.client_factory import HttpClientFactory
 from app.infrastructure.scrapers.http.retry_policy import scraper_retry
 from app.infrastructure.scrapers.http.user_agents import get_default_headers
@@ -44,27 +47,41 @@ class HhApiScraper(BaseWebScraper):
     async def fetch(self, site_filter: SiteFilter) -> AsyncIterator[Job]:
         seen_ids: set[str] = set()
 
-        if site_filter.city:
-            async for job in self._fetch_query(self._build_office_params(site_filter), seen_ids):
-                yield job
+        city_raw = (site_filter.city or "").strip()
+        if city_raw:
+            office_area = normalize_hh_area_id(city_raw)
+            if office_area:
+                pairs = self._build_office_pairs(site_filter, office_area)
+                async for job in self._fetch_query(pairs, seen_ids):
+                    yield job
+            else:
+                logger.warning(
+                    "hh.ru: город «{}» не распознан — укажите ID региона hh.ru или название из справочника. "
+                    "Офисный/гибридный поиск пропущен.",
+                    city_raw,
+                )
 
         if site_filter.search_remote:
-            async for job in self._fetch_query(self._build_remote_params(site_filter), seen_ids):
+            async for job in self._fetch_query(self._build_remote_pairs(site_filter), seen_ids):
                 yield job
 
     async def _fetch_query(
-        self, params: dict[str, Any], seen_ids: set[str]
+        self,
+        base_pairs: Sequence[tuple[str, Any]],
+        seen_ids: set[str],
     ) -> AsyncIterator[Job]:
+        base_list = list(base_pairs)
         for page in range(_MAX_PAGES):
-            params["page"] = page
-            html = await self._fetch_page(params)
+            pairs = [(k, v) for k, v in base_list if k != "page"]
+            pairs.append(("page", page))
+            html = await self._fetch_page(pairs)
             if html is None:
                 break
 
             soup = BeautifulSoup(html, "lxml")
             cards = soup.select(selectors.VACANCY_CARD)
             if not cards:
-                logger.debug("hh.ru: пусто на странице {} (params={})", page, params)
+                logger.debug("hh.ru: пусто на странице {} (pairs={})", page, pairs[:6])
                 break
 
             for card in cards:
@@ -77,11 +94,11 @@ class HhApiScraper(BaseWebScraper):
             await asyncio.sleep(1.2)
 
     @scraper_retry
-    async def _fetch_page(self, params: dict[str, Any]) -> str | None:
+    async def _fetch_page(self, pairs: Sequence[tuple[str, Any]]) -> str | None:
         await self._limiter.acquire()
         resp = await self._http.client.get(
             _BASE_URL,
-            params=params,
+            params=list(pairs),
             headers=get_default_headers(),
         )
         if resp.status_code != 200:
@@ -90,32 +107,29 @@ class HhApiScraper(BaseWebScraper):
         return resp.text
 
     @staticmethod
-    def _build_office_params(f: SiteFilter) -> dict[str, Any]:
-        """Офис/гибрид в указанном городе (city — это ID региона hh.ru, например 1=Москва)."""
-        params: dict[str, Any] = {
-            "items_on_page": _PER_PAGE,
-            "schedule": "fullDay",
-        }
+    def _build_office_pairs(f: SiteFilter, area_id: str) -> list[tuple[str, Any]]:
+        """Офис/гибрид в указанном регионе (area_id — строковый ID hh.ru)."""
+        pairs: list[tuple[str, Any]] = [
+            ("items_on_page", _PER_PAGE),
+            ("schedule", "fullDay"),
+            ("schedule", "flexible"),
+            ("area", area_id),
+        ]
         if f.query_text:
-            params["text"] = f.query_text
-        if f.city:
-            params["area"] = f.city
-        if f.grade and f.grade in HH_EXPERIENCE_MAP:
-            params["experience"] = HH_EXPERIENCE_MAP[f.grade]
-        return params
+            pairs.append(("text", f.query_text))
+        return pairs
 
     @staticmethod
-    def _build_remote_params(f: SiteFilter) -> dict[str, Any]:
-        """Удалёнка по всей РФ (без area)."""
-        params: dict[str, Any] = {
-            "items_on_page": _PER_PAGE,
-            "schedule": "remote",
-        }
+    def _build_remote_pairs(f: SiteFilter) -> list[tuple[str, Any]]:
+        """Удалёнка с ограничением регионом «Россия» на hh.ru (area=113)."""
+        pairs: list[tuple[str, Any]] = [
+            ("items_on_page", _PER_PAGE),
+            ("schedule", "remote"),
+            hh_remote_area_param(),
+        ]
         if f.query_text:
-            params["text"] = f.query_text
-        if f.grade and f.grade in HH_EXPERIENCE_MAP:
-            params["experience"] = HH_EXPERIENCE_MAP[f.grade]
-        return params
+            pairs.append(("text", f.query_text))
+        return pairs
 
     @staticmethod
     def _parse_card(card: Tag) -> Job | None:

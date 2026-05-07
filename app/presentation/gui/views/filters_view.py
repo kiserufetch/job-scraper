@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import flet as ft
 
 from app.domain.entities import SiteFilter
-from app.domain.enums import GradeLevel, SourceType
+from app.domain.enums import SourceType
 from app.presentation.gui.components.filter_form import FilterForm
 from app.presentation.gui.theme import GROK_ON_SURFACE, GROK_ON_SURFACE_DIM
 
@@ -60,15 +60,12 @@ class FiltersView(ft.Column):
 
             form = FilterForm(
                 source_name=src_type.value.upper(),
-                initial_grade=existing.grade.value if existing and existing.grade else "",
                 initial_stack=", ".join(existing.stack) if existing else "",
                 initial_city=existing.city if existing else "",
                 initial_query=existing.query_text if existing else "",
                 initial_search_remote=existing.search_remote if existing else True,
-                on_save=lambda grade, stack, city, query, remote, sid=source.id: (
-                    self.page.run_task(
-                        self._save_filter, sid, grade, stack, city, query, remote
-                    )
+                on_save=lambda stack, city, query, remote, sid=source.id: (
+                    self.page.run_task(self._save_filter, sid, stack, city, query, remote)
                     if self.page
                     else None
                 ),
@@ -83,7 +80,6 @@ class FiltersView(ft.Column):
     async def _save_filter(
         self,
         source_id: int,
-        grade: str,
         stack: str,
         city: str,
         query: str,
@@ -91,7 +87,7 @@ class FiltersView(ft.Column):
     ) -> None:
         site_filter = SiteFilter(
             source_id=source_id,
-            grade=GradeLevel(grade) if grade else None,
+            grade=None,
             stack=[s.strip() for s in stack.split(",") if s.strip()],
             city=city,
             query_text=query,

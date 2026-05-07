@@ -14,7 +14,6 @@ from app.domain.enums import SourceType
 from app.infrastructure.scrapers.base_scraper import BaseWebScraper
 from app.infrastructure.scrapers.habr.description_parser import (
     extract_city,
-    extract_grade,
     extract_salary,
 )
 from app.infrastructure.scrapers.http.client_factory import HttpClientFactory
@@ -61,14 +60,9 @@ class HabrRssScraper(BaseWebScraper):
             return None
         return resp.text
 
-    def _parse_entry(self, entry: dict, site_filter: SiteFilter) -> Job | None:
+    def _parse_entry(self, entry: dict, _site_filter: SiteFilter) -> Job | None:
         try:
             desc = entry.get("summary", "") or entry.get("description", "")
-
-            if site_filter.grade:
-                entry_grade = extract_grade(desc)
-                if entry_grade != site_filter.grade:
-                    return None
 
             published = self._parse_date(entry.get("published"))
 

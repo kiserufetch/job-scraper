@@ -16,9 +16,10 @@ from app.infrastructure.scrapers.geekjob import selectors
 from app.infrastructure.scrapers.http.client_factory import HttpClientFactory
 from app.infrastructure.scrapers.http.retry_policy import scraper_retry
 from app.infrastructure.scrapers.http.user_agents import get_default_headers
+from app.shared.query_token_aliases import haystack_matches_search_tokens
 
 _BASE_URL = "https://geekjob.ru/vacancies"
-_MAX_PAGES = 3
+_MAX_PAGES = 12
 _ID_RE = re.compile(r"/vacancy/([a-zA-Z0-9]+)")
 
 
@@ -31,7 +32,7 @@ class GeekJobScraper(BaseWebScraper):
 
     async def fetch(self, site_filter: SiteFilter) -> AsyncIterator[Job]:
         seen_ids: set[str] = set()
-        query = (site_filter.query_text or "").strip().lower()
+        query = (site_filter.query_text or "").strip()
 
         for page in range(1, _MAX_PAGES + 1):
             html = await self._fetch_page(page)
@@ -56,10 +57,10 @@ class GeekJobScraper(BaseWebScraper):
             await asyncio.sleep(1.5)
 
     @staticmethod
-    def _matches_query(job: Job, query_lower: str) -> bool:
-        """GeekJob не умеет server-side поиск, поэтому фильтруем локально по тексту."""
-        haystack = f"{job.title} {job.company} {job.description}".lower()
-        return query_lower in haystack
+    def _matches_query(job: Job, query: str) -> bool:
+        """GeekJob не умеет server-side поиск — фильтруем локально (название, компания, теги)."""
+        haystack = f"{job.title} {job.company} {job.description}"
+        return haystack_matches_search_tokens(haystack, query)
 
     @scraper_retry
     async def _fetch_page(self, page: int) -> str | None:
