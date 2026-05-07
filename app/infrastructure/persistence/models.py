@@ -82,6 +82,7 @@ class JobModel(Base):
     city: Mapped[str] = mapped_column(String(200), default="")
     url: Mapped[str] = mapped_column(String(1000), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
+    work_placement: Mapped[str] = mapped_column(String(20), default="unknown")
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

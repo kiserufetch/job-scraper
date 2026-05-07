@@ -57,6 +57,16 @@ class DatabaseManager:
             except Exception:
                 await session.rollback()
 
+            try:
+                await session.execute(
+                    text(
+                        "ALTER TABLE jobs ADD COLUMN work_placement VARCHAR(20) DEFAULT 'unknown'"
+                    )
+                )
+                await session.commit()
+            except Exception:
+                await session.rollback()
+
     async def _seed_defaults(self) -> None:
         """Создать начальные записи, если БД пуста."""
         async with self._session_factory() as session:

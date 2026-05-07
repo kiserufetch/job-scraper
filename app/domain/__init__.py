@@ -8,7 +8,7 @@ from app.domain.entities import (
     SourceConfig,
     TelegramChannel,
 )
-from app.domain.enums import GradeLevel, SourceType
+from app.domain.enums import GradeLevel, SourceType, WorkPlacement
 
 __all__ = [
     "AppSettings",
@@ -19,4 +19,5 @@ __all__ = [
     "SourceConfig",
     "SourceType",
     "TelegramChannel",
+    "WorkPlacement",
 ]

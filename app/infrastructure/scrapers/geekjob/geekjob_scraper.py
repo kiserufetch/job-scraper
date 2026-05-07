@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup, Tag
 from loguru import logger
 
 from app.domain.entities import Job, SiteFilter
-from app.domain.enums import SourceType
+from app.domain.enums import SourceType, WorkPlacement
 from app.infrastructure.scrapers.base_scraper import BaseWebScraper
 from app.infrastructure.scrapers.geekjob import selectors
 from app.infrastructure.scrapers.http.client_factory import HttpClientFactory
@@ -121,6 +121,11 @@ class GeekJobScraper(BaseWebScraper):
             tags = [t.get_text(strip=True) for t in card.select(selectors.TAGS)]
             description = ", ".join(tags) if tags else ""
 
+            tags_blob = " ".join(tags).casefold()
+            work_placement = (
+                WorkPlacement.REMOTE if "remote" in tags_blob else WorkPlacement.UNKNOWN
+            )
+
             return Job(
                 external_id=external_id,
                 source=SourceType.GEEKJOB,
@@ -130,6 +135,7 @@ class GeekJobScraper(BaseWebScraper):
                 city=city,
                 url=url,
                 description=description,
+                work_placement=work_placement,
             )
         except Exception as exc:
             logger.warning("GeekJob: ошибка парсинга карточки: {}", exc)

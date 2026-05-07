@@ -12,6 +12,15 @@ class SourceType(StrEnum):
     TELEGRAM = "telegram"
 
 
+class WorkPlacement(StrEnum):
+    """Формат занятости для отображения в уведомлениях."""
+
+    UNKNOWN = "unknown"
+    OFFICE = "office"
+    HYBRID = "hybrid"
+    REMOTE = "remote"
+
+
 class GradeLevel(StrEnum):
     """Уровень грейда (опыта) для фильтрации вакансий."""
 

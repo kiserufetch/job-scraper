@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.application.interfaces.repositories import IJobRepository
 from app.domain.entities import Job
-from app.domain.enums import SourceType
+from app.domain.enums import SourceType, WorkPlacement
 from app.infrastructure.persistence.models import JobModel
 
 
@@ -29,6 +29,7 @@ class JobRepository(IJobRepository):
                     city=j.city,
                     url=j.url,
                     description=j.description,
+                    work_placement=j.work_placement.value,
                     published_at=j.published_at,
                 )
                 for j in jobs
@@ -53,6 +54,12 @@ class JobRepository(IJobRepository):
 
     @staticmethod
     def _to_entity(m: JobModel) -> Job:
+        wp_raw = getattr(m, "work_placement", None) or "unknown"
+        try:
+            wp = WorkPlacement(wp_raw)
+        except ValueError:
+            wp = WorkPlacement.UNKNOWN
+
         return Job(
             id=m.id,
             external_id=m.external_id,
@@ -63,6 +70,7 @@ class JobRepository(IJobRepository):
             city=m.city,
             url=m.url,
             description=m.description,
+            work_placement=wp,
             published_at=m.published_at,
             created_at=m.created_at,
         )

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
-from app.domain.enums import GradeLevel, SourceType
+from app.domain.enums import GradeLevel, SourceType, WorkPlacement
 
 
 @dataclass
@@ -20,6 +20,7 @@ class Job:
     salary: str = ""
     city: str = ""
     description: str = ""
+    work_placement: WorkPlacement = WorkPlacement.UNKNOWN
     published_at: datetime | None = None
     created_at: datetime = field(default_factory=datetime.utcnow)
     id: int | None = None

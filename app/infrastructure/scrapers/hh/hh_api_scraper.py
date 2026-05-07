@@ -20,7 +20,7 @@ from bs4 import BeautifulSoup, Tag
 from loguru import logger
 
 from app.domain.entities import Job, SiteFilter
-from app.domain.enums import SourceType
+from app.domain.enums import SourceType, WorkPlacement
 from app.infrastructure.scrapers.base_scraper import BaseWebScraper
 from app.infrastructure.scrapers.hh import selectors
 from app.infrastructure.scrapers.hh.area_normalize import (
@@ -52,7 +52,7 @@ class HhApiScraper(BaseWebScraper):
             office_area = normalize_hh_area_id(city_raw)
             if office_area:
                 pairs = self._build_office_pairs(site_filter, office_area)
-                async for job in self._fetch_query(pairs, seen_ids):
+                async for job in self._fetch_query(pairs, seen_ids, from_remote_branch=False):
                     yield job
             else:
                 logger.warning(
@@ -62,13 +62,16 @@ class HhApiScraper(BaseWebScraper):
                 )
 
         if site_filter.search_remote:
-            async for job in self._fetch_query(self._build_remote_pairs(site_filter), seen_ids):
+            async for job in self._fetch_query(
+                self._build_remote_pairs(site_filter), seen_ids, from_remote_branch=True
+            ):
                 yield job
 
     async def _fetch_query(
         self,
         base_pairs: Sequence[tuple[str, Any]],
         seen_ids: set[str],
+        from_remote_branch: bool,
     ) -> AsyncIterator[Job]:
         base_list = list(base_pairs)
         for page in range(_MAX_PAGES):
@@ -85,7 +88,7 @@ class HhApiScraper(BaseWebScraper):
                 break
 
             for card in cards:
-                job = self._parse_card(card)
+                job = self._parse_card(card, from_remote_branch)
                 if job is None or job.external_id in seen_ids:
                     continue
                 seen_ids.add(job.external_id)
@@ -132,7 +135,21 @@ class HhApiScraper(BaseWebScraper):
         return pairs
 
     @staticmethod
-    def _parse_card(card: Tag) -> Job | None:
+    def _hh_work_placement(card: Tag, from_remote_branch: bool) -> WorkPlacement:
+        """Режим работы по бейджу в карточке или по ветке поиска (офисный / удалённый)."""
+        el = card.select_one(selectors.SCHEDULE)
+        text = el.get_text(" ", strip=True).casefold() if el else ""
+        if text:
+            if "гибрид" in text or "hybrid" in text:
+                return WorkPlacement.HYBRID
+            if "удал" in text or "remote" in text or "дистанц" in text:
+                return WorkPlacement.REMOTE
+            if "офис" in text:
+                return WorkPlacement.OFFICE
+        return WorkPlacement.REMOTE if from_remote_branch else WorkPlacement.OFFICE
+
+    @staticmethod
+    def _parse_card(card: Tag, from_remote_branch: bool) -> Job | None:
         try:
             title_el = card.select_one(selectors.TITLE)
             if title_el is None:
@@ -172,6 +189,7 @@ class HhApiScraper(BaseWebScraper):
                 city=city,
                 url=url,
                 description=description,
+                work_placement=HhApiScraper._hh_work_placement(card, from_remote_branch),
             )
         except Exception as exc:
             logger.warning("hh.ru: ошибка парсинга карточки: {}", exc)
