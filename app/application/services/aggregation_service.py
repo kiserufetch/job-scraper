@@ -15,6 +15,7 @@ from app.application.interfaces.repositories import (
 )
 from app.application.interfaces.scrapers import IJobScraper
 from app.application.services.deduplication_service import DeduplicationService
+from app.application.services.title_query_match import title_matches_search_query
 from app.domain.entities import Job, SiteFilter, SourceConfig
 from app.domain.enums import SourceType
 
@@ -87,6 +88,16 @@ class AggregationService:
             async for job in scraper.fetch(site_filter):
                 fetched.append(job)
 
+            before_pf = len(fetched)
+            fetched = self._apply_title_post_filter(fetched, site_filter, source.type)
+            if before_pf != len(fetched):
+                logger.debug(
+                    "{}: постфильтр по заголовку {} → {} записей",
+                    source.type.value,
+                    before_pf,
+                    len(fetched),
+                )
+
             scrape_result.fetched = fetched
 
             new_jobs = await self._dedup.filter_new(fetched)
@@ -120,3 +131,15 @@ class AggregationService:
 
         site_filter = await self._filter_repo.get_by_source_id(source.id)
         return site_filter or SiteFilter(source_id=source.id)
+
+    @staticmethod
+    def _apply_title_post_filter(
+        jobs: list[Job], site_filter: SiteFilter, source_type: SourceType
+    ) -> list[Job]:
+        """Оставить только вакансии, где запрос отражён в заголовке (кроме Telegram)."""
+        if source_type == SourceType.TELEGRAM:
+            return jobs
+        q = (site_filter.query_text or "").strip()
+        if not q:
+            return jobs
+        return [j for j in jobs if title_matches_search_query(j.title, q)]
