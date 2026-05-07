@@ -1,0 +1,37 @@
+# Ядро
+sqlalchemy[asyncio]>=2.0
+aiosqlite>=0.20
+alembic>=1.13
+
+# HTTP / парсинг
+httpx[http2]>=0.27
+beautifulsoup4>=4.12
+lxml>=5.1
+feedparser>=6.0
+tenacity>=9.0
+fake-useragent>=1.5
+# системное хранилище сертификатов (Windows: чинит Russian Trusted CA на geekjob.ru)
+truststore>=0.10
+
+# Telegram
+aiogram>=3.4
+telethon>=1.36
+
+# Планировщик
+apscheduler>=3.10
+
+# Конфиг
+pydantic-settings>=2.2
+python-dotenv>=1.0
+
+# GUI
+flet>=0.25
+
+# Логирование
+loguru>=0.7
+
+# Dev
+ruff>=0.4
+mypy>=1.10
+pytest>=8.0
+pytest-asyncio>=0.23

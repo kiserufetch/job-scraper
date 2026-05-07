@@ -1,0 +1,1 @@
+"""ViewModels для GUI."""
